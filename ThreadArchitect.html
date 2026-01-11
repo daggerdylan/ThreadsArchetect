@@ -1,0 +1,609 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Threads Architect</title>
+    <link rel="shortcut icon" href=""> <!-- Dynamic Favicon Target -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        threads: {
+                            bg: '#050505',
+                            card: '#101010',
+                            border: '#1F1F1F',
+                            text: '#F3F5F7',
+                            dim: '#777777',
+                            accent: '#262626',
+                            blue: '#0095F6'
+                        }
+                    },
+                    fontFamily: {
+                        sans: ['Inter', '-apple-system', 'BlinkMacSystemFont', '"Segoe UI"', 'Roboto', 'Helvetica', 'Arial', 'sans-serif'],
+                        mono: ['ui-monospace', 'SFMono-Regular', 'Menlo', 'Monaco', 'Consolas', 'monospace'],
+                    },
+                    boxShadow: {
+                        'glow': '0 0 40px rgba(255, 255, 255, 0.03)',
+                        'card': '0 4px 20px rgba(0,0,0,0.4)',
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        /* --- Core UI Styles --- */
+        body { background-color: #000; background-image: radial-gradient(circle at 50% 0%, #111 0%, #000 70%); }
+
+        ::-webkit-scrollbar { width: 5px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #333; border-radius: 10px; }
+        ::-webkit-scrollbar-thumb:hover { background: #555; }
+
+        textarea { resize: none; field-sizing: content; min-height: 120px; }
+
+        /* Thread Vertical Line */
+        .preview-line {
+            width: 2px;
+            background-color: #333;
+            position: absolute;
+            left: 50%;
+            transform: translateX(-50%);
+            top: 48px;
+            bottom: -12px;
+            z-index: 0;
+        }
+        .last-item .preview-line { display: none; }
+
+        .fade-in { animation: fadeIn 0.4s cubic-bezier(0.16, 1, 0.3, 1); }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+
+        /* --- Tab System (Pill Design) --- */
+        .tab-btn {
+            color: #666;
+            border-radius: 9999px;
+            transition: all 0.2s ease;
+        }
+        .tab-btn:hover { color: #fff; background: rgba(255,255,255,0.05); }
+        .tab-btn.active {
+            background-color: #fff;
+            color: #000;
+            font-weight: 600;
+            box-shadow: 0 0 15px rgba(255,255,255,0.2);
+        }
+
+        /* --- Font Grid Buttons --- */
+        .font-btn {
+            background: linear-gradient(145deg, #151515, #0a0a0a);
+            border: 1px solid #1F1F1F;
+        }
+        .font-btn:hover {
+            border-color: #333;
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+        }
+        .font-btn:active { transform: translateY(0); }
+    </style>
+</head>
+<body class="text-threads-text font-sans antialiased h-screen overflow-hidden flex flex-col selection:bg-white/20 selection:text-white">
+
+    <!-- Header -->
+    <header class="h-16 border-b border-threads-border flex items-center justify-between px-6 z-20 shrink-0 bg-black/50 backdrop-blur-md">
+        <div class="flex items-center gap-2">
+            <!-- Icon Removed as requested -->
+            <span class="font-bold text-xl tracking-tight text-white">Architect</span>
+        </div>
+        <button onclick="copyAll()" class="bg-white text-black px-6 py-2 rounded-full font-bold text-sm hover:bg-neutral-200 transition-all shadow-glow active:scale-95">
+            Copy Thread
+        </button>
+    </header>
+
+    <!-- Main Layout -->
+    <main class="flex-1 flex flex-col lg:flex-row overflow-hidden">
+
+        <!-- LEFT: Controls (Studio) -->
+        <section class="flex-1 flex flex-col border-r border-threads-border bg-black/40 overflow-hidden relative">
+
+            <!-- Tab Navigation -->
+            <div class="flex justify-center p-4 border-b border-threads-border/50">
+                <div class="flex bg-threads-card border border-threads-border rounded-full p-1 gap-1">
+                    <button onclick="switchTab('typography')" id="tab-typography" class="tab-btn active px-5 py-1.5 text-xs">Type</button>
+                    <button onclick="switchTab('symbols')" id="tab-symbols" class="tab-btn px-5 py-1.5 text-xs">Symbols</button>
+                    <button onclick="switchTab('settings')" id="tab-settings" class="tab-btn px-5 py-1.5 text-xs">Settings</button>
+                </div>
+            </div>
+
+            <!-- Scrollable Content Area -->
+            <div class="flex-1 overflow-y-auto custom-scrollbar p-6 pb-24">
+                <div class="max-w-xl mx-auto w-full space-y-6">
+
+                    <!-- EDITOR: Always Visible -->
+                    <div class="bg-threads-card border border-threads-border rounded-2xl p-5 shadow-card group relative transition-colors hover:border-neutral-800">
+                        <div class="flex justify-between items-center mb-3">
+                            <span class="text-[10px] font-bold text-threads-dim uppercase tracking-widest">Active Post <span id="currentPostIndex">1</span></span>
+                            <!-- Character Ring -->
+                            <div class="relative w-5 h-5 flex items-center justify-center">
+                                <svg class="transform -rotate-90 w-5 h-5">
+                                    <circle cx="10" cy="10" r="8" stroke="#333" stroke-width="2" fill="none" />
+                                    <circle id="charRing" cx="10" cy="10" r="8" stroke="#fff" stroke-width="2" fill="none" stroke-dasharray="50.2" stroke-dashoffset="50.2" class="transition-all duration-300" />
+                                </svg>
+                                <span id="charWarning" class="absolute text-[10px] text-red-500 font-bold hidden">!</span>
+                            </div>
+                        </div>
+
+                        <textarea id="postInput" placeholder="Start a thread..."
+                            class="w-full bg-transparent text-lg text-white placeholder-neutral-700 focus:outline-none leading-relaxed font-sans"
+                            oninput="handleInput()"></textarea>
+
+                        <!-- Image Preview in Editor -->
+                        <div id="editorImagePreview" class="hidden mt-4 relative w-fit group/img">
+                            <img id="editorImgEl" src="" class="h-24 w-auto rounded-xl border border-neutral-800 object-cover opacity-80 transition-opacity group-hover/img:opacity-100">
+                            <button onclick="removeImage()" class="absolute -top-2 -right-2 bg-neutral-800 text-white rounded-full p-1.5 hover:bg-red-900 border border-neutral-700 transition-colors shadow-lg">
+                                <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                            </button>
+                        </div>
+
+                        <!-- Quick Actions Bar -->
+                        <div class="flex justify-between items-center mt-4 pt-4 border-t border-threads-border/50">
+                            <button onclick="clearFormatting()" class="text-xs text-neutral-500 hover:text-red-400 flex items-center gap-1.5 transition-colors group/clear">
+                                <svg class="w-3.5 h-3.5 group-hover/clear:rotate-90 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                                Clear Styles
+                            </button>
+                            <button onclick="optimizeBreaks()" class="text-xs text-neutral-500 hover:text-white transition-colors">
+                                Fix Spacing
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- TAB CONTENT: Typography -->
+                    <div id="panel-typography" class="space-y-4 fade-in">
+                        <div class="text-[10px] font-bold text-threads-dim uppercase tracking-widest mb-2">Typography</div>
+                        <div class="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                            <button onclick="applyStyle('bold')" class="font-btn p-3 rounded-xl text-center transition-all"><span class="block text-xl mb-1 font-bold">𝐁old</span><span class="text-[10px] text-neutral-500">Serif Bold</span></button>
+                            <button onclick="applyStyle('italic')" class="font-btn p-3 rounded-xl text-center transition-all"><span class="block text-xl mb-1 italic">𝘐talic</span><span class="text-[10px] text-neutral-500">Sans Italic</span></button>
+                            <button onclick="applyStyle('script')" class="font-btn p-3 rounded-xl text-center transition-all"><span class="block text-xl mb-1">𝒜rt</span><span class="text-[10px] text-neutral-500">Script</span></button>
+                            <button onclick="applyStyle('gothic')" class="font-btn p-3 rounded-xl text-center transition-all"><span class="block text-xl mb-1">𝔊othic</span><span class="text-[10px] text-neutral-500">Fraktur</span></button>
+                            <button onclick="applyStyle('double')" class="font-btn p-3 rounded-xl text-center transition-all"><span class="block text-xl mb-1">𝔻ouble</span><span class="text-[10px] text-neutral-500">Struck</span></button>
+                            <button onclick="applyStyle('mono')" class="font-btn p-3 rounded-xl text-center transition-all"><span class="block text-xl mb-1 font-mono">𝙼ono</span><span class="text-[10px] text-neutral-500">Code</span></button>
+                            <button onclick="applyStyle('bubble')" class="font-btn p-3 rounded-xl text-center transition-all"><span class="block text-xl mb-1">Ⓑubble</span><span class="text-[10px] text-neutral-500">Circled</span></button>
+                            <button onclick="applyStyle('smallcaps')" class="font-btn p-3 rounded-xl text-center transition-all"><span class="block text-xl mb-1">ᴄᴀᴘs</span><span class="text-[10px] text-neutral-500">Small Caps</span></button>
+                            <button onclick="applyStyle('bold_sans')" class="font-btn p-3 rounded-xl text-center transition-all"><span class="block text-xl mb-1 font-bold font-sans">𝗕old</span><span class="text-[10px] text-neutral-500">Sans Bold</span></button>
+                            <button onclick="applyStyle('inverted')" class="font-btn p-3 rounded-xl text-center transition-all"><span class="block text-xl mb-1">ɐz</span><span class="text-[10px] text-neutral-500">Upside Down</span></button>
+                            <button onclick="applyStyle('strike')" class="font-btn p-3 rounded-xl text-center transition-all"><span class="block text-xl mb-1 line-through decoration-white">Strike</span><span class="text-[10px] text-neutral-500">Strikethrough</span></button>
+                            <button onclick="applyStyle('underline')" class="font-btn p-3 rounded-xl text-center transition-all"><span class="block text-xl mb-1 underline decoration-white">Line</span><span class="text-[10px] text-neutral-500">Underline</span></button>
+                        </div>
+                    </div>
+
+                    <!-- TAB CONTENT: Symbol Vault -->
+                    <div id="panel-symbols" class="hidden space-y-6 fade-in">
+                        <div>
+                            <h4 class="text-[10px] font-bold text-threads-dim uppercase tracking-widest mb-3">Aesthetic Emojis</h4>
+                            <div class="grid grid-cols-6 gap-2" id="sym-emojis"></div>
+                        </div>
+                        <div>
+                            <h4 class="text-[10px] font-bold text-threads-dim uppercase tracking-widest mb-3">Arrows & Pointers</h4>
+                            <div class="grid grid-cols-6 gap-2" id="sym-arrows"></div>
+                        </div>
+                        <div>
+                            <h4 class="text-[10px] font-bold text-threads-dim uppercase tracking-widest mb-3">Stars & Sparkles</h4>
+                            <div class="grid grid-cols-6 gap-2" id="sym-stars"></div>
+                        </div>
+                    </div>
+
+                    <!-- TAB CONTENT: Settings & Media -->
+                    <div id="panel-settings" class="hidden space-y-6 fade-in">
+                        <div>
+                            <h4 class="text-[10px] font-bold text-threads-dim uppercase tracking-widest mb-3">Identity</h4>
+                            <div class="bg-threads-card rounded-xl p-4 border border-threads-border space-y-4">
+                                <div class="grid grid-cols-2 gap-4">
+                                    <div><label class="block text-xs text-neutral-500 mb-1.5">Username</label><input type="text" id="usernameInput" value="threads_architect" oninput="updateProfile()" class="w-full bg-black border border-threads-border rounded-lg px-3 py-2 text-sm text-white focus:border-neutral-600 outline-none transition-colors"></div>
+                                    <div><label class="block text-xs text-neutral-500 mb-1.5">Time</label><input type="text" id="timeInput" value="2m" oninput="updateProfile()" class="w-full bg-black border border-threads-border rounded-lg px-3 py-2 text-sm text-white focus:border-neutral-600 outline-none transition-colors"></div>
+                                </div>
+                                <div class="flex items-center justify-between pt-1">
+                                    <label class="text-sm text-neutral-300 flex items-center gap-2 cursor-pointer select-none"><input type="checkbox" id="verifiedToggle" onchange="updateProfile()" class="w-4 h-4 rounded bg-neutral-800 border-neutral-700 text-blue-500 focus:ring-0">Verified Badge</label>
+                                    <div class="flex gap-1.5">
+                                        <button onclick="setAvatarColor('bg-neutral-800')" class="w-6 h-6 rounded-full bg-neutral-800 border border-white/10 hover:scale-110 transition-transform"></button>
+                                        <button onclick="setAvatarColor('bg-blue-600')" class="w-6 h-6 rounded-full bg-blue-600 border border-white/10 hover:scale-110 transition-transform"></button>
+                                        <button onclick="setAvatarColor('bg-purple-600')" class="w-6 h-6 rounded-full bg-purple-600 border border-white/10 hover:scale-110 transition-transform"></button>
+                                        <button onclick="setAvatarColor('bg-red-600')" class="w-6 h-6 rounded-full bg-red-600 border border-white/10 hover:scale-110 transition-transform"></button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div>
+                            <h4 class="text-[10px] font-bold text-threads-dim uppercase tracking-widest mb-3">Media</h4>
+                            <label class="flex flex-col items-center justify-center w-full h-28 border border-neutral-800 border-dashed rounded-xl cursor-pointer hover:bg-neutral-900 hover:border-neutral-600 transition-all group">
+                                <div class="flex flex-col items-center justify-center pt-5 pb-6">
+                                    <svg class="w-6 h-6 mb-2 text-neutral-600 group-hover:text-neutral-400 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
+                                    <p class="text-xs text-neutral-600 group-hover:text-neutral-400">Click to upload image</p>
+                                </div>
+                                <input type="file" accept="image/*" class="hidden" onchange="handleImageUpload(this)">
+                            </label>
+                        </div>
+                    </div>
+
+                    <!-- Thread Controls -->
+                    <div class="grid grid-cols-2 gap-3 pt-4 border-t border-threads-border/50">
+                        <button onclick="addReply()" class="col-span-2 py-3 rounded-xl bg-white text-black font-bold hover:bg-neutral-200 transition-all flex justify-center items-center gap-2 shadow-glow active:scale-[0.98]">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
+                            Add Reply
+                        </button>
+                        <button onclick="clearThread()" class="col-span-2 py-3 rounded-xl border border-neutral-800 hover:bg-red-900/10 hover:border-red-900/30 text-neutral-500 hover:text-red-500 transition-all text-sm">
+                            Reset All
+                        </button>
+                    </div>
+
+                </div>
+            </div>
+        </section>
+
+        <!-- RIGHT: Live Preview -->
+        <section class="flex-1 bg-black overflow-y-auto relative flex flex-col items-center pt-10 pb-20 border-l border-threads-border lg:border-none">
+            <div class="w-full max-w-[500px] px-4">
+                <div class="flex justify-between items-center mb-6 px-2 select-none">
+                    <div class="text-neutral-500 text-[10px] font-bold tracking-widest uppercase">Live Preview</div>
+                    <div class="flex gap-1">
+                        <div class="w-1 h-1 rounded-full bg-neutral-700"></div>
+                        <div class="w-1 h-1 rounded-full bg-neutral-700"></div>
+                        <div class="w-1 h-1 rounded-full bg-neutral-700"></div>
+                    </div>
+                </div>
+
+                <div id="threadContainer" class="space-y-0"></div>
+
+                <div class="flex justify-center mt-8 opacity-0 transition-opacity duration-500" id="endMarker">
+                    <div class="w-1.5 h-1.5 rounded-full bg-neutral-800"></div>
+                </div>
+                <div class="h-20"></div>
+            </div>
+        </section>
+    </main>
+
+    <!-- JS Logic -->
+    <script>
+        // --- Configuration & Data ---
+        let posts = [{ id: 1, text: "", image: null }];
+        let activePostIndex = 0;
+        let config = { username: 'threads_architect', verified: false, time: '2m', avatarColor: 'bg-neutral-800' };
+
+        // --- Font Maps ---
+        const fonts = {
+            bold: { map: { 'A': '𝐀', 'B': '𝐁', 'C': '𝐂', 'D': '𝐃', 'E': '𝐄', 'F': '𝐅', 'G': '𝐆', 'H': '𝐇', 'I': '𝐈', 'J': '𝐉', 'K': '𝐊', 'L': '𝐋', 'M': '𝐌', 'N': '𝐍', 'O': '𝐎', 'P': '𝐏', 'Q': '𝐐', 'R': '𝐑', 'S': '𝐒', 'T': '𝐓', 'U': '𝐔', 'V': '𝐕', 'W': '𝐖', 'X': '𝐗', 'Y': '𝐘', 'Z': '𝐙', 'a': '𝐚', 'b': '𝐛', 'c': '𝐜', 'd': '𝐝', 'e': '𝐞', 'f': '𝐟', 'g': '𝐠', 'h': '𝐡', 'i': '𝐢', 'j': '𝐣', 'k': '𝐤', 'l': '𝐥', 'm': '𝐦', 'n': '𝐧', 'o': '𝐨', 'p': '𝐩', 'q': '𝐪', 'r': '𝐫', 's': '𝐬', 't': '𝐭', 'u': '𝐮', 'v': '𝐯', 'w': '𝐰', 'x': '𝐱', 'y': '𝐲', 'z': '𝐳', '0': '𝟎', '1': '𝟏', '2': '𝟐', '3': '𝟑', '4': '𝟒', '5': '𝟓', '6': '𝟔', '7': '𝟕', '8': '𝟖', '9': '𝟗' } },
+            bold_sans: { map: { 'A': '𝗔', 'B': '𝗕', 'C': '𝗖', 'D': '𝗗', 'E': '𝗘', 'F': '𝗙', 'G': '𝗚', 'H': '𝗛', 'I': '𝗜', 'J': '𝗝', 'K': '𝗞', 'L': '𝗟', 'M': '𝗠', 'N': '𝗡', 'O': '𝗢', 'P': '𝗣', 'Q': '𝗤', 'R': '𝗥', 'S': '𝗦', 'T': '𝗧', 'U': '𝗨', 'V': '𝗩', 'W': '𝗪', 'X': '𝗫', 'Y': '𝗬', 'Z': '𝗭', 'a': '𝗮', 'b': '𝗯', 'c': '𝗰', 'd': '𝗱', 'e': '𝗲', 'f': '𝗳', 'g': '𝗴', 'h': '𝗵', 'i': '𝗶', 'j': '𝗷', 'k': '𝗸', 'l': '𝗹', 'm': '𝗺', 'n': '𝗻', 'o': '𝗼', 'p': '𝗽', 'q': '𝗾', 'r': '𝗿', 's': '𝘀', 't': '𝘁', 'u': '𝘂', 'v': '𝘃', 'w': '𝘄', 'x': '𝘅', 'y': '𝘆', 'z': '𝘇', '0': '𝟬', '1': '𝟭', '2': '𝟮', '3': '𝟯', '4': '𝟰', '5': '𝟱', '6': '𝟲', '7': '𝟳', '8': '𝟴', '9': '𝟵' } },
+            italic: { map: { 'A': '𝘈', 'B': '𝘉', 'C': '𝘊', 'D': '𝘋', 'E': '𝘌', 'F': '𝘍', 'G': '𝘎', 'H': '𝘏', 'I': '𝘐', 'J': '𝘑', 'K': '𝘒', 'L': '𝘓', 'M': '𝘔', 'N': '𝘕', 'O': '𝘖', 'P': '𝘗', 'Q': '𝘘', 'R': '𝘙', 'S': '𝘚', 'T': '𝘛', 'U': '𝘜', 'V': '𝘝', 'W': '𝘞', 'X': '𝘟', 'Y': '𝘠', 'Z': '𝘡', 'a': '𝘢', 'b': '𝘣', 'c': '𝘤', 'd': '𝘥', 'e': '𝘦', 'f': '𝘧', 'g': '𝘨', 'h': '𝘩', 'i': '𝘪', 'j': '𝘫', 'k': '𝘬', 'l': '𝘭', 'm': '𝘮', 'n': '𝘯', 'o': '𝘰', 'p': '𝘱', 'q': '𝘲', 'r': '𝘳', 's': '𝘴', 't': '𝘵', 'u': '𝘶', 'v': '𝘷', 'w': '𝘸', 'x': '𝘹', 'y': '𝘺', 'z': '𝘻' } },
+            script: { map: { 'A': '𝒜', 'B': 'ℬ', 'C': '𝒞', 'D': '𝒟', 'E': 'ℰ', 'F': 'ℱ', 'G': '𝒢', 'H': 'ℋ', 'I': 'ℐ', 'J': '𝒥', 'K': '𝒦', 'L': 'ℒ', 'M': 'ℳ', 'N': '𝒩', 'O': '𝒪', 'P': '𝒫', 'Q': '𝒬', 'R': 'ℛ', 'S': '𝒮', 'T': '𝒯', 'U': '𝒰', 'V': '𝒱', 'W': '𝒲', 'X': '𝒳', 'Y': '𝒴', 'Z': '𝒵', 'a': '𝒶', 'b': '𝒷', 'c': '𝒸', 'd': '𝒹', 'e': 'ℯ', 'f': '𝒻', 'g': 'ℊ', 'h': '𝒽', 'i': '𝒾', 'j': '𝒿', 'k': '𝓀', 'l': '𝓁', 'm': '𝓂', 'n': '𝓃', 'o': 'ℴ', 'p': '𝓅', 'q': '𝓆', 'r': '𝓇', 's': '𝓈', 't': '𝓉', 'u': '𝓊', 'v': '𝓋', 'w': '𝓌', 'x': '𝓍', 'y': '𝓎', 'z': '𝓏' } },
+            gothic: { map: { 'A': '𝔄', 'B': '𝔅', 'C': 'ℭ', 'D': '𝔇', 'E': '𝔈', 'F': '𝔉', 'G': '𝔊', 'H': 'ℌ', 'I': 'ℑ', 'J': '𝔍', 'K': '𝔎', 'L': '𝔏', 'M': '𝔐', 'N': '𝔑', 'O': '𝔒', 'P': '𝔓', 'Q': '𝔔', 'R': 'ℜ', 'S': '𝔖', 'T': '𝔗', 'U': '𝔘', 'V': '𝔙', 'W': '𝔚', 'X': '𝔛', 'Y': '𝔜', 'Z': 'ℨ', 'a': '𝔞', 'b': '𝔟', 'c': '𝔠', 'd': '𝔡', 'e': '𝔢', 'f': '𝔣', 'g': '𝔤', 'h': '𝔥', 'i': '𝔦', 'j': '𝔧', 'k': '𝔨', 'l': '𝔩', 'm': '𝔪', 'n': '𝔫', 'o': '𝔬', 'p': '𝔭', 'q': '𝔮', 'r': '𝔯', 's': '𝔰', 't': '𝔱', 'u': '𝔲', 'v': '𝔳', 'w': '𝔴', 'x': '𝔵', 'y': '𝔶', 'z': '𝔷' } },
+            double: { map: { 'A': '𝔸', 'B': '𝔹', 'C': 'ℂ', 'D': '𝔻', 'E': '𝔼', 'F': '𝔽', 'G': '𝔾', 'H': 'ℍ', 'I': '𝕀', 'J': '𝕁', 'K': '𝕂', 'L': '𝕃', 'M': '𝕄', 'N': 'ℕ', 'O': '𝕆', 'P': 'ℙ', 'Q': 'ℚ', 'R': 'ℝ', 'S': '𝕊', 'T': '𝕋', 'U': '𝕌', 'V': '𝕍', 'W': '𝕎', 'X': '𝕏', 'Y': '𝕐', 'Z': 'ℤ', 'a': '𝕒', 'b': '𝕓', 'c': '𝕔', 'd': '𝕕', 'e': '𝕖', 'f': '𝕗', 'g': '𝕘', 'h': '𝕙', 'i': '𝕚', 'j': '𝕛', 'k': '𝕜', 'l': '𝕝', 'm': '𝕞', 'n': '𝕟', 'o': '𝕠', 'p': '𝕡', 'q': '𝕢', 'r': '𝕣', 's': '𝕤', 't': '𝕥', 'u': '𝕦', 'v': '𝕧', 'w': '𝕨', 'x': '𝕩', 'y': '𝕪', 'z': '𝕫', '0': '𝟘', '1': '𝟙', '2': '𝟚', '3': '𝟛', '4': '𝟜', '5': '𝟝', '6': '𝟞', '7': '𝟟', '8': '𝟠', '9': '𝟡' } },
+            mono: { map: { 'A': '𝙰', 'B': '𝙱', 'C': '𝙲', 'D': '𝙳', 'E': '𝙴', 'F': '𝙵', 'G': '𝙶', 'H': '𝙷', 'I': '𝙸', 'J': '𝙹', 'K': '𝙺', 'L': '𝙻', 'M': '𝙼', 'N': '𝙽', 'O': '𝙾', 'P': '𝙿', 'Q': '𝚀', 'R': '𝚁', 'S': '𝚂', 'T': '𝚃', 'U': '𝚄', 'V': '𝚅', 'W': '𝚆', 'X': '𝚇', 'Y': '𝚈', 'Z': '𝚉', 'a': '𝚊', 'b': '𝚋', 'c': '𝚌', 'd': '𝚍', 'e': '𝚎', 'f': '𝚏', 'g': '𝚐', 'h': '𝚑', 'i': '𝚒', 'j': '𝚓', 'k': '𝚔', 'l': '𝚕', 'm': '𝚖', 'n': '𝚗', 'o': '𝚘', 'p': '𝚙', 'q': '𝚀', 'r': '𝚛', 's': '𝚜', 't': '𝚝', 'u': '𝚞', 'v': '𝚟', 'w': '𝚠', 'x': '𝚡', 'y': '𝚢', 'z': '𝚣', '0': '𝟶', '1': '𝟷', '2': '𝟸', '3': '𝟹', '4': '𝟺', '5': '𝟻', '6': '𝟼', '7': '𝟽', '8': '𝟾', '9': '𝟿' } },
+            bubble: { map: { 'A': 'Ⓐ', 'B': 'Ⓑ', 'C': 'Ⓒ', 'D': 'Ⓓ', 'E': 'Ⓔ', 'F': 'Ⓕ', 'G': 'Ⓖ', 'H': 'Ⓗ', 'I': 'Ⓘ', 'J': 'Ⓙ', 'K': 'Ⓚ', 'L': 'Ⓛ', 'M': 'Ⓜ', 'N': 'Ⓝ', 'O': 'Ⓞ', 'P': 'Ⓟ', 'Q': 'Ⓠ', 'R': 'Ⓡ', 'S': 'Ⓢ', 'T': 'Ⓣ', 'U': 'Ⓤ', 'V': 'Ⓥ', 'W': 'Ⓦ', 'X': 'Ⓧ', 'Y': 'Ⓨ', 'Z': 'Ⓩ', 'a': 'ⓐ', 'b': 'ⓑ', 'c': 'ⓒ', 'd': 'ⓓ', 'e': 'ⓔ', 'f': 'ⓕ', 'g': 'ⓖ', 'h': 'ⓗ', 'i': 'ⓘ', 'j': 'ⓙ', 'k': 'ⓚ', 'l': 'ⓛ', 'm': 'ⓜ', 'n': 'ⓝ', 'o': 'ⓞ', 'p': 'ⓟ', 'q': 'ⓠ', 'r': 'ⓡ', 's': 'ⓢ', 't': 'ⓣ', 'u': 'ⓤ', 'v': 'ⓥ', 'w': 'ⓦ', 'x': 'ⓧ', 'y': 'ⓨ', 'z': 'ⓩ', '0': '⓪', '1': '①', '2': '②', '3': '③', '4': '④', '5': '⑤', '6': '⑥', '7': '⑦', '8': '⑧', '9': '⑨' } },
+            smallcaps: { map: { 'A': 'ᴀ', 'B': 'ʙ', 'C': 'ᴄ', 'D': 'ᴅ', 'E': 'ᴇ', 'F': 'ғ', 'G': 'ɢ', 'H': 'ʜ', 'I': 'ɪ', 'J': 'ᴊ', 'K': 'ᴋ', 'L': 'ʟ', 'M': 'ᴍ', 'N': 'ɴ', 'O': 'ᴏ', 'P': 'ᴘ', 'Q': 'ǫ', 'R': 'ʀ', 'S': 's', 'T': 'ᴛ', 'U': 'ᴜ', 'V': 'ᴠ', 'W': 'ᴡ', 'X': 'x', 'Y': 'ʏ', 'Z': 'ᴢ', 'a': 'ᴀ', 'b': 'ʙ', 'c': 'ᴄ', 'd': 'ᴅ', 'e': 'ᴇ', 'f': 'ғ', 'g': 'ɢ', 'h': 'ʜ', 'i': 'ɪ', 'j': 'ᴊ', 'k': 'ᴋ', 'l': 'ʟ', 'm': 'ᴍ', 'n': 'ɴ', 'o': 'ᴏ', 'p': 'ᴘ', 'q': 'ǫ', 'r': 'ʀ', 's': 's', 't': 'ᴛ', 'u': 'ᴜ', 'v': 'ᴠ', 'w': 'ᴡ', 'x': 'x', 'y': 'ʏ', 'z': 'ᴢ' } },
+            inverted: { map: { 'A': '∀', 'B': 'q', 'C': 'Ↄ', 'D': 'p', 'E': 'Ǝ', 'F': 'Ⅎ', 'G': '⅁', 'H': 'H', 'I': 'I', 'J': 'ſ', 'K': 'ʞ', 'L': '˥', 'M': 'W', 'N': 'N', 'O': 'O', 'P': 'd', 'Q': 'Ό', 'R': 'y', 'S': 'S', 'T': '┴', 'U': '∩', 'V': 'Λ', 'W': 'M', 'X': 'X', 'Y': '⅄', 'Z': 'Z', 'a': 'ɐ', 'b': 'q', 'c': 'ɔ', 'd': 'p', 'e': 'ǝ', 'f': 'ɟ', 'g': 'ƃ', 'h': 'ɥ', 'i': 'ᴉ', 'j': 'ɾ', 'k': 'ʞ', 'l': 'l', 'm': 'ɯ', 'n': 'u', 'o': 'o', 'p': 'd', 'q': 'b', 'r': 'ɹ', 's': 's', 't': 'ʇ', 'u': 'n', 'v': 'ʌ', 'w': 'ʍ', 'x': 'x', 'y': 'ʎ', 'z': 'z', '?': '¿', '!': '¡', '.': '˙', ',': '\'' } }
+        };
+
+        const symbols = {
+            emojis: ['✨', '☁️', '🕊️', '🤍', '🏹', '🧸', '🕯️', '🩰', '☕', '🥯', '🎧', '💿', '📸', '🎞️', '🪐', '🌙', '⚡', '🩹', '🧷', '📎', '🧿', '🔮', '💊', '🧬', '🦠', '🧪', '🧼', '🧺', '🛒', '🛍️'],
+            arrows: ['←', '↑', '→', '↓', '↔', '↕', '↖', '↗', '↘', '↙', '↩', '↪', '⇒', '⇐', '⇑', '⇓', '⇔'],
+            stars: ['★', '☆', '✦', '✧', '✩', '✪', '✫', '✬', '✭', '✮', '✯', '✰', '⁂', '⁎', '⁑'],
+        };
+
+        const colorMap = {
+            'bg-neutral-800': '#262626',
+            'bg-blue-600': '#2563EB',
+            'bg-purple-600': '#9333EA',
+            'bg-red-600': '#DC2626',
+            'text-white': '#FFFFFF',
+            'text-neutral-500': '#737373'
+        };
+
+        // --- FIX: Build Reverse Map (Excluding Inverted to prevent collisions) ---
+        let reverseMap = {};
+        Object.keys(fonts).forEach(key => {
+            if (key !== 'inverted') {
+                const map = fonts[key].map;
+                Object.entries(map).forEach(([normal, fancy]) => {
+                    reverseMap[fancy] = normal;
+                });
+            }
+        });
+
+        // --- Init ---
+        function init() {
+            setFavicon();
+            renderThread();
+            renderSymbols();
+            updateCharCount();
+        }
+
+        // --- UI Logic ---
+        function setFavicon() {
+            const canvas = document.createElement('canvas');
+            canvas.width = 64; canvas.height = 64;
+            const ctx = canvas.getContext('2d');
+            ctx.fillStyle = '#fff';
+            ctx.beginPath();
+            ctx.arc(32, 32, 30, 0, Math.PI*2);
+            ctx.fill();
+            ctx.fillStyle = '#000';
+            ctx.font = 'bold 40px sans-serif';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText('@', 32, 34);
+            const link = document.querySelector("link[rel*='icon']") || document.createElement('link');
+            link.type = 'image/x-icon';
+            link.rel = 'shortcut icon';
+            link.href = canvas.toDataURL();
+            document.head.appendChild(link);
+        }
+
+        function switchTab(tabName) {
+            document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+            document.getElementById(`tab-${tabName}`).classList.add('active');
+
+            document.getElementById('panel-typography').classList.add('hidden');
+            document.getElementById('panel-symbols').classList.add('hidden');
+            document.getElementById('panel-settings').classList.add('hidden');
+            document.getElementById(`panel-${tabName}`).classList.remove('hidden');
+        }
+
+        function renderSymbols() {
+            const createBtn = (char) => `<button onclick="insertSymbol('${char}')" class="h-8 rounded bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-white text-sm transition-colors">${char}</button>`;
+            document.getElementById('sym-emojis').innerHTML = symbols.emojis.map(createBtn).join('');
+            document.getElementById('sym-arrows').innerHTML = symbols.arrows.map(createBtn).join('');
+            document.getElementById('sym-stars').innerHTML = symbols.stars.map(createBtn).join('');
+        }
+
+        // --- Text Manipulation ---
+        function handleInput() {
+            const textarea = document.getElementById('postInput');
+            posts[activePostIndex].text = textarea.value;
+            renderThread();
+            updateCharCount();
+        }
+
+        function insertSymbol(char) {
+            const textarea = document.getElementById('postInput');
+            const start = textarea.selectionStart;
+            const end = textarea.selectionEnd;
+            const text = textarea.value;
+
+            const newText = text.substring(0, start) + char + text.substring(end);
+            textarea.value = newText;
+            posts[activePostIndex].text = newText;
+            textarea.focus();
+            textarea.setSelectionRange(start + char.length, start + char.length);
+            renderThread();
+        }
+
+        function applyStyle(styleType) {
+            const textarea = document.getElementById('postInput');
+            const start = textarea.selectionStart;
+            const end = textarea.selectionEnd;
+            const text = textarea.value;
+
+            if (start === end) return;
+
+            const selectedText = text.substring(start, end);
+            let transformed = '';
+
+            if (styleType === 'strike') {
+                transformed = selectedText.split('').map(c => c + '\u0336').join('');
+            } else if (styleType === 'underline') {
+                transformed = selectedText.split('').map(c => c + '\u0332').join('');
+            } else {
+                const map = fonts[styleType].map;
+                for (let char of selectedText) {
+                    // Try to revert first to handle re-styling
+                    let baseChar = reverseMap[char] || char;
+                    transformed += map[baseChar] || baseChar;
+                }
+            }
+
+            const newText = text.substring(0, start) + transformed + text.substring(end);
+            textarea.value = newText;
+            posts[activePostIndex].text = newText;
+            textarea.setSelectionRange(start, start + transformed.length);
+            textarea.focus();
+            renderThread();
+        }
+
+        function clearFormatting() {
+            const textarea = document.getElementById('postInput');
+            const start = textarea.selectionStart;
+            const end = textarea.selectionEnd;
+            const text = textarea.value;
+
+            let targetText = (start !== end) ? text.substring(start, end) : text;
+            // Remove combining marks
+            let cleaned = targetText.replace(/[\u0336\u0332]/g, '');
+            // Revert mapped chars
+            let reverted = '';
+            for (let char of cleaned) {
+                reverted += reverseMap[char] || char;
+            }
+
+            if (start !== end) {
+                const newText = text.substring(0, start) + reverted + text.substring(end);
+                textarea.value = newText;
+                posts[activePostIndex].text = newText;
+                textarea.setSelectionRange(start, start + reverted.length);
+            } else {
+                textarea.value = reverted;
+                posts[activePostIndex].text = reverted;
+            }
+
+            textarea.focus();
+            renderThread();
+        }
+
+        function optimizeBreaks() {
+            const textarea = document.getElementById('postInput');
+            let text = textarea.value;
+            text = text.replace(/([^\n])\n([^\n])/g, '$1\n\n$2');
+            textarea.value = text;
+            handleInput();
+        }
+
+        function updateCharCount() {
+            const count = posts[activePostIndex].text.length;
+            const ring = document.getElementById('charRing');
+            const warning = document.getElementById('charWarning');
+            const percent = Math.min(count / 500, 1);
+            // Circumference 50.2
+            ring.style.strokeDashoffset = 50.2 - (50.2 * percent);
+
+            if (count > 500) {
+                ring.style.stroke = '#EF4444';
+                warning.classList.remove('hidden');
+            } else {
+                ring.style.stroke = '#fff';
+                warning.classList.add('hidden');
+            }
+        }
+
+        // --- Image & Profile ---
+        function handleImageUpload(input) {
+            if (input.files && input.files[0]) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    posts[activePostIndex].image = e.target.result;
+                    updateEditorImagePreview();
+                    renderThread();
+                    input.value = '';
+                }
+                reader.readAsDataURL(input.files[0]);
+            }
+        }
+
+        function removeImage() {
+            posts[activePostIndex].image = null;
+            updateEditorImagePreview();
+            renderThread();
+        }
+
+        function updateEditorImagePreview() {
+            const container = document.getElementById('editorImagePreview');
+            const img = document.getElementById('editorImgEl');
+            if (posts[activePostIndex].image) {
+                img.src = posts[activePostIndex].image;
+                container.classList.remove('hidden');
+            } else {
+                container.classList.add('hidden');
+            }
+        }
+
+        function updateProfile() {
+            config.username = document.getElementById('usernameInput').value || 'username';
+            config.time = document.getElementById('timeInput').value || '2m';
+            config.verified = document.getElementById('verifiedToggle').checked;
+            renderThread();
+        }
+
+        function setAvatarColor(color) {
+            config.avatarColor = color;
+            renderThread();
+        }
+
+        // --- Thread Management ---
+        function addReply() {
+            posts.push({ id: Date.now(), text: "", image: null });
+            activePostIndex = posts.length - 1;
+            loadPostIntoEditor(activePostIndex);
+            setTimeout(() => {
+                const container = document.getElementById('threadContainer');
+                container.lastElementChild.scrollIntoView({ behavior: 'smooth' });
+            }, 100);
+        }
+
+        function editPost(index) {
+            activePostIndex = index;
+            loadPostIntoEditor(index);
+        }
+
+        function loadPostIntoEditor(index) {
+            document.getElementById('postInput').value = posts[index].text;
+            document.getElementById('currentPostIndex').innerText = index + 1;
+            updateEditorImagePreview();
+            document.getElementById('postInput').focus();
+            updateCharCount();
+            renderThread();
+        }
+
+        function clearThread() {
+            if(confirm("Reset everything?")) {
+                posts = [{ id: 1, text: "", image: null }];
+                activePostIndex = 0;
+                loadPostIntoEditor(0);
+            }
+        }
+
+        function copyAll() {
+            const allText = posts.map(p => p.text).join('\n\n---\n\n');
+            navigator.clipboard.writeText(allText).then(() => {
+                const btn = document.querySelector('header button');
+                const original = btn.innerText;
+                btn.innerText = "Copied!";
+                setTimeout(() => btn.innerText = original, 2000);
+            });
+        }
+
+        // --- Rendering ---
+        function renderThread() {
+            const container = document.getElementById('threadContainer');
+            container.innerHTML = '';
+
+            const verifiedBadge = config.verified ?
+                `<svg class="w-3.5 h-3.5 text-threads-blue ml-1" viewBox="0 0 24 24" fill="currentColor"><path d="M12.5 2C12.5 2 12.5 2 12.5 2C12.5 2 12.5 2 12.5 2C16.9714 2.00001 19.8967 4.92526 19.8967 9.39667C19.8967 10.6358 20.334 11.2335 21.0367 11.6033C21.6567 11.9296 21.6567 12.8204 21.0367 13.1467C20.334 13.5165 19.8967 14.1142 19.8967 15.3533C19.8967 19.8247 16.9714 22.75 12.5 22.75C11.2608 22.75 10.6631 23.1873 10.2933 23.89C9.96701 24.51 9.07623 24.51 8.74991 23.89C8.38012 23.1873 7.78243 22.75 6.54326 22.75C2.07185 22.75 -0.853424 19.8247 -0.853424 15.3533C-0.853424 14.1142 -1.29074 13.5165 -1.99342 13.1467C-2.61342 12.82 -2.61342 11.9296 -1.99342 11.6033C-1.29074 11.2335 -0.853424 10.6358 -0.853424 9.39667C-0.853424 4.92526 2.07185 2.00001 6.54326 2.00001C7.78243 2.00001 8.38012 1.5627 8.74991 0.859992C9.07623 0.239992 9.96701 0.239992 10.2933 0.859992C10.6631 1.5627 11.2608 2 12.5 2ZM10.2197 15.0303L15.4697 9.78033C15.7626 9.48744 15.7626 9.01256 15.4697 8.71967C15.1768 8.42678 14.7019 8.42678 14.409 8.71967L9.68934 13.4393L7.59099 11.341C7.2981 11.0481 6.82322 11.0481 6.53033 11.341C6.23744 11.6339 6.23744 12.1088 6.53033 12.4017L9.15901 15.0303C9.4519 15.3232 9.92678 15.3232 10.2197 15.0303Z"></path></svg>` : '';
+
+            posts.forEach((post, index) => {
+                const isLast = index === posts.length - 1;
+                const isActive = index === activePostIndex;
+                const opacityClass = isActive ? 'opacity-100' : 'opacity-50 hover:opacity-90 transition-opacity cursor-pointer';
+                const borderClass = isActive ? 'border-l-2 border-threads-text pl-3 -ml-3.5' : 'pl-0';
+                const formattedText = post.text ? post.text.replace(/\n/g, '<br>') : '<span class="text-neutral-600 italic">Start typing...</span>';
+                const imageHtml = post.image ? `<div class="mt-3 rounded-xl overflow-hidden border border-neutral-800 fade-in"><img src="${post.image}" class="w-full h-auto object-cover max-h-[400px]"></div>` : '';
+
+                const html = `
+                <div class="flex gap-3 relative ${isLast ? 'last-item' : ''} ${opacityClass} ${borderClass} py-1 transition-all" onclick="editPost(${index})">
+                    <div class="flex flex-col items-center flex-shrink-0 w-10 relative">
+                        <div class="w-9 h-9 rounded-full ${config.avatarColor} border border-neutral-700 flex items-center justify-center overflow-hidden z-10 shadow-sm">
+                            <span class="text-white font-bold text-xs">${config.username.substring(0,2).toUpperCase()}</span>
+                        </div>
+                        <div class="preview-line"></div>
+                    </div>
+                    <div class="flex-1 pb-6 min-w-0">
+                        <div class="flex justify-between items-start">
+                            <div class="flex items-center gap-1">
+                                <span class="font-semibold text-[15px] text-white leading-none truncate max-w-[150px]">${config.username}</span>
+                                ${verifiedBadge}
+                            </div>
+                            <div class="flex items-center gap-3 shrink-0">
+                                <span class="text-neutral-500 text-[14px]">${config.time}</span>
+                                <svg class="w-4 h-4 text-neutral-500" fill="currentColor" viewBox="0 0 24 24"><path d="M12 13a1 1 0 100-2 1 1 0 000 2zM19 13a1 1 0 100-2 1 1 0 000 2zM5 13a1 1 0 100-2 1 1 0 000 2z"></path></svg>
+                            </div>
+                        </div>
+                        <div class="mt-1 text-[15px] leading-relaxed text-white whitespace-pre-wrap font-normal break-words">${formattedText}</div>
+                        ${imageHtml}
+                        <div class="flex items-center gap-5 mt-3 pl-0.5">
+                            <svg class="w-[20px] h-[20px] text-white stroke-[1.8]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"></path></svg>
+                            <svg class="w-[20px] h-[20px] text-white stroke-[1.8]" fill="none" stroke="currentColor" viewBox="0 0 24 24" style="transform: scaleX(-1);"><path stroke-linecap="round" stroke-linejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"></path></svg>
+                            <svg class="w-[20px] h-[20px] text-white stroke-[1.8]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
+                            <svg class="w-[18px] h-[18px] text-white stroke-[1.8]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"></path></svg>
+                        </div>
+                    </div>
+                </div>`;
+                container.insertAdjacentHTML('beforeend', html);
+            });
+
+            const endMarker = document.getElementById('endMarker');
+            posts.length > 1 ? endMarker.classList.remove('opacity-0') : endMarker.classList.add('opacity-0');
+        }
+
+        init();
+    </script>
+</body>
+</html>
